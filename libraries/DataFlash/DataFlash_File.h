@@ -78,6 +78,9 @@ protected:
     bool WritesOK() const override;
 
 private:
+#if AERIALTRONICS
+    int _write_small_fd;
+#endif
     int _write_fd;
     int _read_fd;
     uint16_t _read_fd_log_num;

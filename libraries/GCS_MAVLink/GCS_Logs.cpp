@@ -23,12 +23,22 @@
 #include <DataFlash/DataFlash.h>
 
 extern const AP_HAL::HAL& hal;
+#if AERIALTRONICS
+bool send_small_log = false;
+#endif
 
 /**
    handle all types of log download requests from the GCS
  */
 void GCS_MAVLINK::handle_log_message(mavlink_message_t *msg, DataFlash_Class &dataflash)
 {
+#if AERIALTRONICS
+    // With special component ID the small logfile is requested
+    if (msg->compid == MAV_COMP_ID_MISSIONPLANNER + 1)
+        send_small_log = true;
+   else
+        send_small_log = false;
+#endif
     switch (msg->msgid) {
     case MAVLINK_MSG_ID_LOG_REQUEST_LIST:
         handle_log_request_list(msg, dataflash);

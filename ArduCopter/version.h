@@ -10,3 +10,8 @@
 #else
 #define FIRMWARE_STRING THISFIRMWARE " (" GIT_VERSION ")"
 #endif
+#if AERIALTRONICS
+// Modify version string
+#undef FIRMWARE_STRING
+#define FIRMWARE_STRING THISFIRMWARE "AT " __DATE__ " " __TIME__
+#endif

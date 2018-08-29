@@ -777,6 +777,9 @@ private:
     bool verify_yaw();
     void do_take_picture();
     void log_picture();
+#if AERIALTRONICS
+    void log_feedback();
+#endif
     MAV_RESULT mavlink_compassmot(mavlink_channel_t chan);
     void delay(uint32_t ms);
     bool acro_init(bool ignore_checks);

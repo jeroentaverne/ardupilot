@@ -36,6 +36,10 @@ This provides some support code and variables for MAVLink enabled sketches
 #pragma GCC diagnostic pop
 #endif
 
+#if AERIALTRONICS
+    static bool firmware_update = false;
+#endif
+
 AP_HAL::UARTDriver	*mavlink_comm_port[MAVLINK_COMM_NUM_BUFFERS];
 
 mavlink_system_t mavlink_system = {7,1};
@@ -95,8 +99,45 @@ uint8_t comm_receive_ch(mavlink_channel_t chan)
     if (!valid_channel(chan)) {
         return 0;
     }
-
+#if AERIALTRONICS
+    // Switch to firmware update mode when special sequence is received over USB
+    extern const AP_HAL::HAL& hal;
+    static const uint8_t key[] = {0xbe, 0x6d, 0x8c, 0xc9, 0xac, 0xbd, 0x4c, 0xea, 0xcb, 0x63, 0x04, 0x67, 0x5d, 0xc9, 0x54, 0xd6, 0x75, 0xa4, 0x2b, 0xad, 0x9e, 0x23, 0x04, 0x07, 0xa6, 0xe1, 0x02, 0xf6, 0x9d, 0xde, 0x9d, 0xf7};
+    static int key_idx = 0;
+    uint8_t data = mavlink_comm_port[chan]->read();
+    if (hal.gpio->usb_connected()) {
+        if (chan == MAVLINK_COMM_0)
+        {
+            if (data == key[key_idx]) {
+                key_idx++;
+                if (key_idx == sizeof(key)) {
+                    firmware_update = true;
+                    key_idx = 0;
+                }
+            }
+            else
+                key_idx = 0;
+        }
+    } else {
+        key_idx = 0;
+        firmware_update = false;
+    }
+    if (firmware_update) {
+        if (chan == MAVLINK_COMM_0)
+        {
+            mavlink_comm_port[MAVLINK_COMM_1]->write(&data, 1);
+            mavlink_comm_port[MAVLINK_COMM_2]->write(&data, 1);
+            mavlink_comm_port[MAVLINK_COMM_3]->write(&data, 1);
+        } else {
+            mavlink_comm_port[MAVLINK_COMM_0]->write(&data, 1);
+        }
+        return 0;
+    } else {
+        return data;
+    }
+#else
     return (uint8_t)mavlink_comm_port[chan]->read();
+#endif
 }
 
 /// Check for available transmit space on the nominated MAVLink channel
@@ -142,6 +183,11 @@ uint16_t comm_get_available(mavlink_channel_t chan)
  */
 void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
 {
+#if AERIALTRONICS
+    // Don't allow sending any Mavlink messages when in firmware update mode
+    if (firmware_update)
+		return;
+#endif
     if (!valid_channel(chan)) {
         return;
     }

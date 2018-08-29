@@ -11,6 +11,10 @@
 using namespace PX4;
 
 extern const AP_HAL::HAL& hal;
+#if AERIALTRONICS
+// Add override timer for controls
+static int override_timer = -1;
+#endif
 
 void PX4RCInput::init()
 {
@@ -51,6 +55,10 @@ uint8_t PX4RCInput::num_channels()
 
 uint16_t PX4RCInput::read(uint8_t ch)
 {
+#if AERIALTRONICS
+    if (override_timer == -1)
+        clear_overrides();
+#endif
     if (ch >= RC_INPUT_MAX_CHANNELS) {
         return 0;
     }
@@ -97,6 +105,9 @@ bool PX4RCInput::set_override(uint8_t channel, int16_t override) {
         return false;
     }
     _override[channel] = override;
+#if AERIALTRONICS
+    override_timer = 1000;
+#endif
     if (override != 0) {
         _override_valid = true;
         return true;
@@ -109,6 +120,9 @@ void PX4RCInput::clear_overrides()
     for (uint8_t i = 0; i < RC_INPUT_MAX_CHANNELS; i++) {
         set_override(i, 0);
     }
+#if AERIALTRONICS
+    override_timer = -1;
+#endif
 }
 
 void PX4RCInput::_timer_tick(void)
@@ -122,6 +136,10 @@ void PX4RCInput::_timer_tick(void)
     }
     // note, we rely on the vehicle code checking new_input()
     // and a timeout for the last valid input to handle failsafe
+#if AERIALTRONICS
+    if (override_timer > 0)
+        override_timer--;
+#endif
     perf_end(_perf_rcin);
 }
 
