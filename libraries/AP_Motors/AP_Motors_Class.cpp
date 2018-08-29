@@ -95,9 +95,15 @@ void AP_Motors::rc_write(uint8_t chan, uint16_t pwm)
           250, making them fail the pulse type auto-detection. This
           happens at least with BLHeli
         */
+#if AERIALTRONICS
+        // Make sure motors stop rotating at minimum throttle
+        if (pwm <= 125) {
+            pwm = 120;
+#else
         if (pwm < 125) {
             pwm = 125;
-        } else if (pwm > 250) {
+#endif
+		} else if (pwm > 250) {
             pwm = 250;
         }
     }

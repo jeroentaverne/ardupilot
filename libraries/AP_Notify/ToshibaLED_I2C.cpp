@@ -26,6 +26,9 @@
 
 extern const AP_HAL::HAL& hal;
 
+#if !AERIALTRONICS
+// Replace LED driver and add control of LEDs on arms by channel 6
+
 #define TOSHIBA_LED_I2C_ADDR 0x55    // default I2C bus address
 #define TOSHIBA_LED_I2C_BUS_INTERNAL    0
 #define TOSHIBA_LED_I2C_BUS_EXTERNAL    1
@@ -91,3 +94,59 @@ void ToshibaLED_I2C::_timer(void)
 
     _dev->transfer(val, sizeof(val), nullptr, 0);
 }
+
+#else
+
+#define LED_I2C_ADDR 0x40    // default I2C bus address
+#define LED_I2C_BUS_INTERNAL    0
+
+bool ToshibaLED_I2C::hw_init()
+{
+    // get internal I2C bus driver
+    _dev = std::move(hal.i2c_mgr->get_device(LED_I2C_BUS_INTERNAL, LED_I2C_ADDR));
+    if (!_dev || !_dev->get_semaphore()->take(HAL_SEMAPHORE_BLOCK_FOREVER)) {
+        return false;
+    }
+    uint8_t enable[] = {0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xaa, 0xaa};
+    bool ret = _dev->transfer(enable, sizeof(enable), nullptr, 0);
+
+    // give back i2c semaphore
+    _dev->get_semaphore()->give();
+
+    _dev->register_periodic_callback(20000, FUNCTOR_BIND_MEMBER(&ToshibaLED_I2C::_timer, void));
+
+    return ret;
+}
+
+// set_rgb - set color as a combination of red, green and blue values
+bool ToshibaLED_I2C::hw_set_rgb(uint8_t red, uint8_t green, uint8_t blue)
+{
+    rgb = {red, green, blue};
+    _need_update = true;
+    return true;
+}
+
+void ToshibaLED_I2C::_timer(void)
+{
+    static bool on = true;
+
+    if (hal.rcin->read(6-1) > 1700) {
+        if (!on) {
+            on = true;
+            _need_update = true;
+        }
+        if (_need_update) {
+            _need_update = false;
+            uint8_t val[] = {0x82, rgb.b, 0xff, rgb.g, 0xff, rgb.r, 0xff, 0xff, 0xff};
+            _dev->transfer(val, sizeof(val), nullptr, 0);
+        }
+    } else {
+        if (on) {
+            on = false;
+            uint8_t val[] = {0x82, 0, 0, 0, 0, 0, 0, 0, 0};
+            _dev->transfer(val, sizeof(val), nullptr, 0);
+        }
+    }
+}
+
+#endif

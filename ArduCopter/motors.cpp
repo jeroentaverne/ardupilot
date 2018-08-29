@@ -12,6 +12,14 @@ static uint32_t auto_disarm_begin;
 void Copter::arm_motors_check()
 {
     static int16_t arming_counter;
+#if AERIALTRONICS
+    // Allow arming for 10 seconds when arm switch was moved (low RC5 value) and throttle above 40% and vehicle is landed and motors are not armed
+    static int16_t arm_allowed_timer = 0;
+    if (RC_Channels::rc_channel(CH_5)->get_radio_in() < 1100 && channel_throttle->get_control_in() > 400 && ap.land_complete && !motors->armed())
+        arm_allowed_timer = 100;
+    else if (arm_allowed_timer)
+        arm_allowed_timer--;
+#endif
 
     // ensure throttle is down
     if (channel_throttle->get_control_in() > 0) {
@@ -21,8 +29,13 @@ void Copter::arm_motors_check()
 
     int16_t tmp = channel_yaw->get_control_in();
 
-    // full right
-    if (tmp > 4000) {
+#if AERIALTRONICS
+    // Allow arming in center or right
+    if (tmp >= 0) {
+#else
+     // full right
+     if (tmp > 4000) {
+#endif
 
         // increase the arming counter to a maximum of 1 beyond the auto trim counter
         if( arming_counter <= AUTO_TRIM_DELAY ) {
@@ -30,13 +43,24 @@ void Copter::arm_motors_check()
         }
 
         // arm the motors and configure for flight
+#if AERIALTRONICS
+        // Also check if arming is allowed
+        if (arm_allowed_timer && arming_counter == ARM_DELAY && !motors->armed()) {
+            arm_allowed_timer = 0;
+            // reset arming counter if arming fail
+            if (!init_arm_motors(false)) {
+                arming_counter = 0;
+            }
+        }
+#else
         if (arming_counter == ARM_DELAY && !motors->armed()) {
             // reset arming counter if arming fail
             if (!init_arm_motors(false)) {
                 arming_counter = 0;
             }
         }
-
+#endif
+		
         // arm the motors and configure for flight
         if (arming_counter == AUTO_TRIM_DELAY && motors->armed() && control_mode == STABILIZE) {
             auto_trim_counter = 250;

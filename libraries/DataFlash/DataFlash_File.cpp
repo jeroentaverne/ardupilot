@@ -40,6 +40,169 @@ extern const AP_HAL::HAL& hal;
 
 #define MAX_LOG_FILES 500U
 #define DATAFLASH_PAGE_SIZE 1024UL
+#if AERIALTRONICS
+extern bool send_small_log;
+static uint8_t lengths[256];
+
+// Change filename extension to BI2
+static void fname2small(char *fname)
+{
+    fname[strlen(fname) - 1] = '2';
+}
+
+// Change filename extension to BIN
+static void fname2normal(char *fname)
+{
+    fname[strlen(fname) - 1] = 'N';
+}
+
+// Return filesize of file
+static int get_file_size(char* fname)
+{
+    struct stat st;
+    if (::stat(fname, &st) != 0)
+        return 0;
+    else
+        return st.st_size;
+}
+
+// Reset filter for small logfile generation
+static void init_small_logfile(void)
+{
+    memset(lengths, 0, sizeof(lengths));
+    lengths[LOG_FORMAT_MSG] = sizeof(log_Format);
+}
+
+// Filter data for small logfile and write data
+static void write_small_log(int write_fd, const uint8_t *writebuf, uint16_t nbytes)
+{
+    uint8_t index = 0;
+    uint8_t type = 0;
+    uint8_t length = 0;
+    static uint8_t buf[256];
+
+    while (nbytes > 0)
+    {
+        // Read one byte from writebuffer
+        uint8_t data = *writebuf;
+        writebuf++;
+        nbytes--;
+
+        if (index < sizeof(buf))
+            buf[index] = data;
+
+        switch (index)
+        {
+            case 0:
+                if (data == HEAD_BYTE1)
+                    index++;
+                else
+                    index = 0;
+                break;
+            case 1:
+                if (data == HEAD_BYTE2)
+                    index++;
+                else
+                    index = 0;
+                break;
+            case 2:
+                type = data;
+                length = lengths[type];
+                if (length > 0)
+                    index++;
+                else
+                    index = 0;
+                break;
+            default:
+                index++;
+                if (index == length)
+                {
+                    if (type == LOG_FORMAT_MSG)
+                    {
+                        struct log_Format format;
+                        if (sizeof(format) == length)
+                        {
+                            memcpy(&format, buf, length);
+                            if (lengths[format.type] == 0)
+                                lengths[format.type] = format.length;
+                            // Only write required format messages
+                            if (format.type == LOG_FORMAT_MSG || format.type == LOG_GPS_MSG || format.type == LOG_CAMERA_MSG)
+                            {
+                                ::write(write_fd, buf, length);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Only write required messages
+                        if (type == LOG_GPS_MSG)
+                        {
+                            static int gpscount = 0;
+                            gpscount++;
+                            if (gpscount == 5)
+                            {
+                                ::write(write_fd, buf, length);
+                                gpscount = 0;
+                            }
+                        }
+                        if (type == LOG_CAMERA_MSG)
+                        {
+                            ::write(write_fd, buf, length);
+                        }
+                    }
+
+                    // Allow next message to be parsed
+                    index = 0;
+                }
+                break;
+        }
+    }
+}
+
+
+static void generate_small_log(char* fname)
+{
+    int read_fd, write_fd;
+    static uint8_t readbuf[256];
+    uint16_t nbytes = 0;
+
+    init_small_logfile();
+
+    read_fd = ::open(fname, O_RDONLY|O_CLOEXEC);
+    // Stop generation when source file is not available
+    if (read_fd == -1)
+        return;
+    fname2small(fname);
+    // Stop generation when destination file already is generated
+    if (get_file_size(fname) > 0)
+    {
+        fname2normal(fname);
+        close(read_fd);
+        return;
+    }
+    unlink(fname);
+    write_fd = ::open(fname, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666);
+    if (write_fd == -1)
+    {
+        close(read_fd);
+        fname2normal(fname);
+        return;
+    }
+
+    while (1)
+    {
+        nbytes = ::read(read_fd, readbuf, sizeof(readbuf));
+         if (nbytes <= 0)
+         {
+            ::close(read_fd);
+            ::close(write_fd);
+            fname2normal(fname);
+            return;
+         }
+        write_small_log(write_fd, readbuf, nbytes);
+    }
+}
+#endif
 
 /*
   constructor
@@ -48,6 +211,9 @@ DataFlash_File::DataFlash_File(DataFlash_Class &front,
                                DFMessageWriter_DFLogStart *writer,
                                const char *log_directory) :
     DataFlash_Backend(front, writer),
+#if AERIALTRONICS
+    _write_small_fd(-1),
+#endif
     _write_fd(-1),
     _read_fd(-1),
     _read_fd_log_num(0),
@@ -204,6 +370,9 @@ void DataFlash_File::periodic_1Hz(const uint32_t now)
         // semaphore_write_fd not taken here as if the io thread is
         // dead it may not release lock...
         _write_fd = -1;
+#if AERIALTRONICS
+        _write_small_fd = -1;
+#endif
         _initialised = false;
     }
 }
@@ -502,11 +671,21 @@ void DataFlash_File::EraseAll()
             break;
         }
         unlink(fname);
+#if AERIALTRONICS
+        // Also delete small logfile
+        fname2small(fname);
+        unlink(fname);
+#endif
         free(fname);
     }
     char *fname = _lastlog_file_name();
     if (fname != nullptr) {
         unlink(fname);
+#if AERIALTRONICS
+        // Also delete small logfile
+        fname2small(fname);
+        unlink(fname);
+#endif
         free(fname);
     }
 #endif
@@ -626,6 +805,22 @@ uint16_t DataFlash_File::find_last_log()
     return ret;
 }
 
+#if AERIALTRONICS
+// Return log size depending on request of big or small logfile
+uint32_t DataFlash_File::_get_log_size(const uint16_t log_num) const
+{
+    char *fname = _log_file_name(log_num);
+    unsigned int filesize_normal = get_file_size(fname);
+    fname2small(fname);
+    unsigned int filesize_small = get_file_size(fname);
+    free(fname);
+
+    if (send_small_log && (filesize_small > 0))
+        return filesize_small;
+    else
+        return filesize_normal;
+}
+#else
 uint32_t DataFlash_File::_get_log_size(const uint16_t log_num) const
 {
 #if DATAFLASH_FILE_MINIMAL
@@ -644,6 +839,7 @@ uint32_t DataFlash_File::_get_log_size(const uint16_t log_num) const
     return st.st_size;
 #endif
 }
+#endif
 
 uint32_t DataFlash_File::_get_log_time(const uint16_t log_num) const
 {
@@ -728,6 +924,15 @@ int16_t DataFlash_File::get_log_data(const uint16_t list_entry, const uint16_t p
             return -1;
         }
         stop_logging();
+#if AERIALTRONICS
+        // Switch to small logfile if this was requested
+        if (send_small_log) {
+            fname2small(fname);
+            if (get_file_size(fname) == 0) {
+                fname2normal(fname);
+            }
+        }
+#endif
         _read_fd = ::open(fname, O_RDONLY|O_CLOEXEC);
         if (_read_fd == -1) {
             _open_error = true;
@@ -841,6 +1046,9 @@ void DataFlash_File::stop_logging(void)
         _write_fd = -1;
         log_write_started = false;
         ::close(fd);
+#if AERIALTRONICS
+        ::close(_write_small_fd);
+#endif
     }
     if (have_sem) {
         write_fd_semaphore->give();
@@ -893,6 +1101,12 @@ uint16_t DataFlash_File::start_new_log(void)
         return 0xFFFF;
     }
     _write_fd = ::open(fname, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666);
+#if AERIALTRONICS
+    // Also create small logfile and init the filtering
+    fname[strlen(fname) - 1] = '2';
+    _write_small_fd = ::open(fname, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666);
+    init_small_logfile();
+#endif
     _cached_oldest_log = 0;
 
     if (_write_fd == -1) {
@@ -1102,6 +1316,9 @@ void DataFlash_File::flush(void)
     if (write_fd_semaphore->take(1)) {
         if (_write_fd != -1) {
             ::fsync(_write_fd);
+#if AERIALTRONICS
+            ::fsync(_write_fd2);
+#endif
         }
         write_fd_semaphore->give();
     } else {
@@ -1166,10 +1383,18 @@ void DataFlash_File::_io_timer(void)
         return;
     }
     ssize_t nwritten = ::write(_write_fd, head, nbytes);
+#if AERIALTRONICS
+    // Also write to small logfile
+    write_small_log(_write_small_fd, head, nbytes);
+#endif
     if (nwritten <= 0) {
         hal.util->perf_count(_perf_errors);
         close(_write_fd);
         _write_fd = -1;
+#if AERIALTRONICS
+       close(_write_small_fd);
+        _write_small_fd = -1;
+#endif
         _initialised = false;
     } else {
         _write_offset += nwritten;
@@ -1182,6 +1407,9 @@ void DataFlash_File::_io_timer(void)
          */
 #if CONFIG_HAL_BOARD != HAL_BOARD_SITL && CONFIG_HAL_BOARD_SUBTYPE != HAL_BOARD_SUBTYPE_LINUX_NONE && CONFIG_HAL_BOARD != HAL_BOARD_QURT
         ::fsync(_write_fd);
+#if AERIALTRONICS
+        ::fsync(_write_small_fd);
+#endif
 #endif
     }
     write_fd_semaphore->give();

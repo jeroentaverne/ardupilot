@@ -20,6 +20,14 @@ void Copter::read_control_switch()
     // calculate position of flight mode switch
     int8_t switch_position;
     uint16_t rc5_in = RC_Channels::rc_channel(CH_5)->get_radio_in();
+#if AERIALTRONICS
+    // Filter out values used by arming
+    if (rc5_in < 1000 || rc5_in > 2000)
+    {
+        control_switch_state.last_edge_time_ms = tnow_ms;
+        return;
+    }
+#endif
     if      (rc5_in < 1231) switch_position = 0;
     else if (rc5_in < 1361) switch_position = 1;
     else if (rc5_in < 1491) switch_position = 2;

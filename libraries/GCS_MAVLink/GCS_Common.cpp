@@ -857,7 +857,7 @@ bool GCS_MAVLINK::send_gps_raw(AP_GPS &gps)
             }
         }
     }
-
+	
     //TODO: Should check what else managed to get through...
     return true;
 
@@ -888,6 +888,8 @@ void GCS_MAVLINK::send_radio_in(uint8_t receiver_rssi)
     memset(values, 0, sizeof(values));
     hal.rcin->read(values, 18);
 
+#if !AERIALTRONICS
+    // Message not used, avoid too much Mavlink traffic
     if (status && (status->flags & MAVLINK_STATUS_FLAG_OUT_MAVLINK1)) {
         // for mavlink1 send RC_CHANNELS_RAW, for compatibility with OSD implementations
         mavlink_msg_rc_channels_raw_send(
@@ -908,6 +910,7 @@ void GCS_MAVLINK::send_radio_in(uint8_t receiver_rssi)
             return;
         }
     }
+#endif
     mavlink_msg_rc_channels_send(
         chan,
         now,

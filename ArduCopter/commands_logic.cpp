@@ -1134,6 +1134,14 @@ void Copter::do_digicam_configure(const AP_Mission::Mission_Command& cmd)
 // do_digicam_control Send Digicam Control message with the camera library
 void Copter::do_digicam_control(const AP_Mission::Mission_Command& cmd)
 {
+#if AERIALTRONICS
+    // Take picture only once within 100 msec
+    static uint32_t next = 0;
+    uint32_t now = millis();
+    if (now < next)
+        return;
+    next = now + 100;
+#endif
     if (camera.control(cmd.content.digicam_control.session,
                        cmd.content.digicam_control.zoom_pos,
                        cmd.content.digicam_control.zoom_step,
@@ -1147,10 +1155,41 @@ void Copter::do_digicam_control(const AP_Mission::Mission_Command& cmd)
 // do_take_picture - take a picture with the camera library
 void Copter::do_take_picture()
 {
+#if AERIALTRONICS
+    // Take picture only once within 100 msec
+    static uint32_t next = 0;
+    uint32_t now = millis();
+    if (now < next)
+        return;
+    next = now + 100;
+#endif
     camera.trigger_pic(true);
     log_picture();
 }
 
+#if AERIALTRONICS
+// Log trigger only once within 100 msec
+void Copter::log_picture()
+{
+    static uint32_t next = 0;
+    uint32_t now = millis();
+    if (now < next)
+        return;
+    next = now + 100;
+    DataFlash.Log_Write_Trigger(ahrs, gps, current_loc);
+}
+
+// Log feedback only once within 100 msec
+void Copter::log_feedback()
+{
+    static uint32_t next = 0;
+    uint32_t now = millis();
+    if (now < next)
+        return;
+    next = now + 100;
+    DataFlash.Log_Write_Camera(ahrs, gps, current_loc);
+}
+#else
 // log_picture - log picture taken and send feedback to GCS
 void Copter::log_picture()
 {
@@ -1165,6 +1204,7 @@ void Copter::log_picture()
         }      
     }
 }
+#endif
 
 #endif
 

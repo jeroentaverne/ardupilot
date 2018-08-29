@@ -1020,6 +1020,68 @@ void GCS_MAVLINK_Copter::handleMessage(mavlink_message_t* msg)
         break;
     }
 
+#if AERIALTRONICS
+    // Add override of all channels
+    case MAVLINK_MSG_ID_RC_CHANNELS:
+    {
+        mavlink_rc_channels_t packet;
+        int16_t v[18];
+        mavlink_msg_rc_channels_decode(msg, &packet);
+
+        v[0] = packet.chan1_raw;
+        v[1] = packet.chan2_raw;
+        v[2] = packet.chan3_raw;
+        v[3] = packet.chan4_raw;
+        v[4] = packet.chan5_raw;
+        v[5] = packet.chan6_raw;
+        v[6] = packet.chan7_raw;
+        v[7] = packet.chan8_raw;
+        v[8] = packet.chan9_raw;
+        v[9] = packet.chan10_raw;
+        v[10] = packet.chan11_raw;
+        v[11] = packet.chan12_raw;
+        v[12] = packet.chan13_raw;
+        v[13] = packet.chan14_raw;
+        v[14] = packet.chan15_raw;
+        v[15] = packet.chan16_raw;
+        v[16] = packet.chan17_raw;
+        v[17] = packet.chan18_raw;
+
+        hal.rcin->set_overrides(v, 18);
+        break;
+    }
+
+    // When receiving camera feedback, log it and pass it to all Mavlink channels
+    case MAVLINK_MSG_ID_CAMERA_FEEDBACK:
+    {
+        mavlink_camera_feedback_t packet;
+        static uint16_t img_idx = 0xffff;
+        mavlink_msg_camera_feedback_decode(msg, &packet);
+
+        if (packet.img_idx != img_idx) {
+            copter.log_feedback();
+            img_idx = packet.img_idx;
+        }
+#if 0
+		if (chan != MAVLINK_COMM_0) _mavlink_resend_uart(MAVLINK_COMM_0, msg);
+		if (chan != MAVLINK_COMM_1) _mavlink_resend_uart(MAVLINK_COMM_1, msg);
+		if (chan != MAVLINK_COMM_2) _mavlink_resend_uart(MAVLINK_COMM_2, msg);
+		if (chan != MAVLINK_COMM_3) _mavlink_resend_uart(MAVLINK_COMM_3, msg);
+#endif
+        break;
+    }
+
+    // When receiving firmware update messages, pass them to all Mavlink channels
+    case 229: // MAVLINK_MSG_ID_FIRMWARE_UPDATE
+    {
+		if (chan != MAVLINK_COMM_0) _mavlink_resend_uart(MAVLINK_COMM_0, msg);
+		if (chan != MAVLINK_COMM_1) _mavlink_resend_uart(MAVLINK_COMM_1, msg);
+		if (chan != MAVLINK_COMM_2) _mavlink_resend_uart(MAVLINK_COMM_2, msg);
+		if (chan != MAVLINK_COMM_3) _mavlink_resend_uart(MAVLINK_COMM_3, msg);
+        break;
+    }
+#endif
+
     case MAVLINK_MSG_ID_MANUAL_CONTROL:
     {
         if(msg->sysid != copter.g.sysid_my_gcs) break;                         // Only accept control from our gcs
@@ -1930,6 +1992,8 @@ void GCS_MAVLINK_Copter::handleMessage(mavlink_message_t* msg)
         break;
 #endif // AC_FENCE == ENABLED
 
+#if AERIALTRONICS
+// Disable deprecated camera messages
 #if CAMERA == ENABLED
     //deprecated.  Use MAV_CMD_DO_DIGICAM_CONFIGURE
     case MAVLINK_MSG_ID_DIGICAM_CONFIGURE:      // MAV ID: 202
@@ -1941,6 +2005,7 @@ void GCS_MAVLINK_Copter::handleMessage(mavlink_message_t* msg)
         copter.log_picture();
         break;
 #endif // CAMERA == ENABLED
+#endif
 
 #if MOUNT == ENABLED
     //deprecated. Use MAV_CMD_DO_MOUNT_CONFIGURE
