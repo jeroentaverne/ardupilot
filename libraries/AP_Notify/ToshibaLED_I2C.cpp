@@ -137,7 +137,7 @@ void ToshibaLED_I2C::_timer(void)
         }
         if (_need_update) {
             _need_update = false;
-            uint8_t val[] = {0x82, rgb.b, 0xff, rgb.g, 0xff, rgb.r, 0xff, 0xff, 0xff};
+            uint8_t val[] = {0x82, rgb.b, 0xff, rgb.r, 0xff, rgb.g, 0xff, 0xff, 0xff};
             _dev->transfer(val, sizeof(val), nullptr, 0);
         }
     } else {
