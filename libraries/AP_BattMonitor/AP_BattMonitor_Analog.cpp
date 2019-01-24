@@ -38,6 +38,10 @@ AP_BattMonitor_Analog::read()
 
         // read current
         _state.current_amps = (_curr_pin_analog_source->voltage_average()-_mon._curr_amp_offset[_state.instance])*_mon._curr_amp_per_volt[_state.instance];
+#if AERIALTRONICS
+        if (_state.current_amps < 0)
+            _state.current_amps = 0;
+#endif
 
         // update total current drawn since startup
         if (_state.last_time_micros != 0 && dt < 2000000.0f) {

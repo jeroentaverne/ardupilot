@@ -1176,7 +1176,12 @@ void Copter::log_picture()
     if (now < next)
         return;
     next = now + 100;
-    DataFlash.Log_Write_Trigger(ahrs, gps, current_loc);
+    if (!camera.using_feedback_pin()) {
+        gcs_send_message(MSG_CAMERA_FEEDBACK);
+        DataFlash.Log_Write_Camera(ahrs, gps, current_loc);
+    } else {
+        DataFlash.Log_Write_Trigger(ahrs, gps, current_loc);
+    }
 }
 
 // Log feedback only once within 100 msec
