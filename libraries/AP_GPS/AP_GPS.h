@@ -124,6 +124,9 @@ public:
 
         // all the following fields must all be filled by the backend driver
         GPS_Status status;                  ///< driver fix status
+#if AERIALTRONICS
+        uint8_t imu_status;
+#endif
         uint32_t time_week_ms;              ///< GPS time (milliseconds from start of GPS week)
         uint16_t time_week;                 ///< GPS week number
         Location location;                  ///< last fix location
@@ -171,6 +174,11 @@ public:
     GPS_Status status(uint8_t instance) const {
         return state[instance].status;
     }
+#if AERIALTRONICS
+    uint8_t imu_status(uint8_t instance) const {
+        return state[instance].imu_status;
+    }
+#endif
     GPS_Status status(void) const {
         return status(primary_instance);
     }

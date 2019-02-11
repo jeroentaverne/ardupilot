@@ -328,6 +328,12 @@ AP_GPS_GSOF::process_message(void)
                 state.have_vertical_accuracy = true;
                 valid++;
             }
+#if AERIALTRONICS
+            else if (output_type == 49) // INS
+            {
+                state.imu_status = gsof_msg.data[a + 6];
+            }
+#endif
 
             a += output_length-1u;
         }

@@ -879,7 +879,11 @@ void AP_GPS::send_mavlink_gps2_raw(mavlink_channel_t chan)
     mavlink_msg_gps2_raw_send(
         chan,
         last_fix_time_ms(1)*(uint64_t)1000,
+#if AERIALTRONICS
+        status(1) | (imu_status(1) << 4),
+#else
         status(1),
+#endif
         loc.lat,
         loc.lng,
         loc.alt * 10UL,

@@ -520,6 +520,10 @@ void Copter::one_hz_loop()
     update_sensor_status_flags();
 }
 
+#if AERIALTRONICS
+bool mission_active = false;
+#endif
+
 // called at 50hz
 void Copter::update_GPS(void)
 {
@@ -551,7 +555,14 @@ void Copter::update_GPS(void)
 
 #if CAMERA == ENABLED
             if (camera.update_location(current_loc, copter.ahrs) == true) {
+#if AERIALTRONICS
+                //if (control_mode == AUTO) {
+                if (mission_active) {
+                    do_take_picture();
+                }
+#else
                 do_take_picture();
+#endif
             }
 #endif
         }

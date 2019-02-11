@@ -194,6 +194,13 @@ void AP_Mission::truncate(uint16_t index)
 ///     should be called at 10hz or higher
 void AP_Mission::update()
 {
+#if AERIALTRONICS
+    extern bool mission_active;
+    if (_flags.state != MISSION_RUNNING)
+        mission_active = false;
+    else
+        mission_active = true;
+#endif
     // exit immediately if not running or no mission commands
     if (_flags.state != MISSION_RUNNING || _cmd_total == 0) {
         return;

@@ -1168,6 +1168,7 @@ void Copter::do_take_picture()
 }
 
 #if AERIALTRONICS
+static bool feedback_received = false;
 // Log trigger only once within 100 msec
 void Copter::log_picture()
 {
@@ -1176,7 +1177,7 @@ void Copter::log_picture()
     if (now < next)
         return;
     next = now + 100;
-    if (!camera.using_feedback_pin()) {
+    if (!feedback_received) {
         gcs_send_message(MSG_CAMERA_FEEDBACK);
         DataFlash.Log_Write_Camera(ahrs, gps, current_loc);
     } else {
@@ -1193,6 +1194,7 @@ void Copter::log_feedback()
         return;
     next = now + 100;
     DataFlash.Log_Write_Camera(ahrs, gps, current_loc);
+    feedback_received = true;
 }
 #else
 // log_picture - log picture taken and send feedback to GCS
