@@ -338,11 +338,15 @@ AP_GPS_GSOF::process_message(void)
             a += output_length-1u;
         }
 
+#if AERIALTRONICS
+        return true;
+#else
         if (valid == 5) {
             return true;
         } else {
             state.status = AP_GPS::NO_FIX;
         }
+#endif
     }
 
     return false;
